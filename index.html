@@ -1,0 +1,1941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Maintenance Expenses Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+:root {
+  --primary: #1a56db;
+  --primary-light: #e8effd;
+  --primary-dark: #1e40af;
+  --danger: #dc2626;
+  --danger-light: #fef2f2;
+  --success: #059669;
+  --success-light: #ecfdf5;
+  --warning: #d97706;
+  --warning-light: #fffbeb;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.08);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font);
+  background: var(--gray-50);
+  color: var(--gray-800);
+  padding-bottom: 80px;
+  min-height: 100vh;
+}
+.hidden { display: none !important; }
+
+/* HEADER */
+.app-header {
+  background: var(--primary);
+  color: white;
+  padding: 16px 20px;
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.app-header h1 { font-size: 18px; font-weight: 600; }
+.app-header .badge {
+  font-size: 11px; background: rgba(255,255,255,0.2);
+  padding: 3px 10px; border-radius: 20px;
+}
+
+/* TABS */
+.tab-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: white; border-top: 1px solid var(--gray-200);
+  display: flex; z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.tab-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 6px 0 8px;
+  font-size: 10px; color: var(--gray-400);
+  background: none; border: none; cursor: pointer;
+  transition: color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab-btn svg { width: 22px; height: 22px; margin-bottom: 2px; }
+.tab-btn.active { color: var(--primary); }
+.tab-btn.active svg { stroke: var(--primary); }
+
+/* PAGES */
+.page { display: none; padding: 16px; max-width: 600px; margin: 0 auto; }
+.page.active { display: block; }
+
+/* CARDS */
+.card {
+  background: white; border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 16px; margin-bottom: 16px;
+}
+.card-title {
+  font-size: 14px; font-weight: 600; color: var(--gray-600);
+  margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+}
+
+/* KPI ROW */
+.kpi-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-bottom: 16px;
+}
+.kpi-card {
+  background: white; border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 14px; text-align: center;
+}
+.kpi-card .label { font-size: 11px; color: var(--gray-500); margin-bottom: 4px; }
+.kpi-card .value { font-size: 20px; font-weight: 700; color: var(--gray-900); }
+.kpi-card .value.red { color: var(--danger); }
+.kpi-card .value.green { color: var(--success); }
+.kpi-card .sub { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+
+.kpi-row-3 {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px; margin-bottom: 16px;
+}
+.kpi-sm {
+  background: white; border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 10px; text-align: center;
+}
+.kpi-sm .label { font-size: 10px; color: var(--gray-400); }
+.kpi-sm .value { font-size: 15px; font-weight: 700; color: var(--gray-800); }
+
+/* PROGRESS BAR */
+.progress-bar-wrap {
+  background: var(--gray-200); border-radius: 20px; height: 10px;
+  overflow: hidden; margin-top: 6px;
+}
+.progress-bar-fill {
+  height: 100%; border-radius: 20px; background: var(--primary);
+  transition: width 0.4s ease; width: 0%;
+}
+.progress-bar-fill.warning { background: var(--warning); }
+.progress-bar-fill.danger { background: var(--danger); }
+
+/* FORM */
+.form-group { margin-bottom: 14px; }
+.form-group label {
+  display: block; font-size: 13px; font-weight: 500;
+  color: var(--gray-600); margin-bottom: 4px;
+}
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%; padding: 10px 12px; font-size: 15px;
+  border: 1.5px solid var(--gray-200); border-radius: 8px;
+  background: white; font-family: var(--font); transition: border-color 0.15s;
+  -webkit-appearance: none; appearance: none;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light);
+}
+.form-group textarea { resize: vertical; min-height: 48px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 12px 24px; font-size: 15px; font-weight: 500;
+  border-radius: 8px; border: none; cursor: pointer;
+  transition: all 0.15s; font-family: var(--font);
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-outline { background: white; color: var(--gray-600); border: 1.5px solid var(--gray-200); }
+.btn-outline:hover { border-color: var(--gray-300); background: var(--gray-50); }
+.btn-sm { padding: 8px 14px; font-size: 13px; }
+.btn-xs { padding: 4px 10px; font-size: 11px; }
+.btn-block { width: 100%; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* TABLE */
+.table-wrap {
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th {
+  background: var(--gray-50); color: var(--gray-500); font-weight: 600;
+  text-align: left; padding: 10px 8px; border-bottom: 2px solid var(--gray-200);
+  white-space: nowrap; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+tbody td {
+  padding: 10px 8px; border-bottom: 1px solid var(--gray-100); vertical-align: middle;
+}
+tbody tr:hover { background: var(--gray-50); }
+.actions-cell { display: flex; gap: 4px; }
+.actions-cell button {
+  background: none; border: 1px solid var(--gray-200); border-radius: 6px;
+  padding: 4px 8px; cursor: pointer; font-size: 12px;
+  transition: all 0.15s;
+}
+.actions-cell .edit-btn { color: var(--primary); }
+.actions-cell .edit-btn:hover { background: var(--primary-light); }
+.actions-cell .del-btn { color: var(--danger); }
+.actions-cell .del-btn:hover { background: var(--danger-light); }
+
+/* FILTERS */
+.filters-row {
+  display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.filters-row select, .filters-row input {
+  padding: 8px 10px; font-size: 13px; border: 1.5px solid var(--gray-200);
+  border-radius: 8px; background: white; font-family: var(--font);
+  flex: 1; min-width: 0;
+}
+.filters-row select:focus, .filters-row input:focus {
+  outline: none; border-color: var(--primary);
+}
+
+/* EMPTY STATE */
+.empty-state {
+  text-align: center; padding: 40px 20px; color: var(--gray-400);
+}
+.empty-state svg { margin-bottom: 12px; opacity: 0.4; }
+.empty-state p { font-size: 14px; }
+
+/* MODAL */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px;
+}
+.modal-content {
+  background: white; border-radius: 14px; padding: 20px;
+  width: 100%; max-width: 400px; box-shadow: var(--shadow-lg);
+}
+.modal-content h3 { font-size: 16px; margin-bottom: 16px; }
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+
+/* TOAST */
+.toast {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--gray-900); color: white; padding: 10px 20px;
+  border-radius: 8px; font-size: 14px; z-index: 300;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+/* EXPORT PAGE */
+.export-presets {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;
+}
+.export-presets button {
+  padding: 12px; font-size: 13px; border: 1.5px solid var(--gray-200);
+  border-radius: 8px; background: white; cursor: pointer; font-family: var(--font);
+  transition: all 0.15s; text-align: center;
+}
+.export-presets button:hover, .export-presets button.active {
+  border-color: var(--primary); background: var(--primary-light); color: var(--primary);
+}
+.export-range { display: flex; gap: 8px; margin-bottom: 14px; }
+.export-range input { flex: 1; }
+
+/* CATEGORY BADGES */
+.cat-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 12px;
+  font-size: 11px; font-weight: 500;
+}
+.cat-rmmachinery { background: #dbeafe; color: #1e40af; }
+.cat-mspare { background: #e0e7ff; color: #3730a3; }
+.cat-consumable { background: #ede9fe; color: #5b21b6; }
+.cat-rmbuilding { background: #fce7f3; color: #9d174d; }
+.cat-rmelectrical { background: #fef3c7; color: #92400e; }
+.cat-rmothers { background: #d1fae5; color: #065f46; }
+.cat-direct { background: #ccfbf1; color: #115e59; }
+.cat-capex { background: #f3e8ff; color: #6d28d9; }
+
+/* CAPEX ITEM BADGE */
+.capex-item-badge {
+  display: inline-block; font-size: 10px; padding: 1px 6px;
+  border-radius: 8px; background: var(--gray-100); color: var(--gray-500);
+  margin-left: 4px;
+}
+
+/* COLLAPSIBLE SECTION */
+.collapse-toggle {
+  cursor: pointer; user-select: none;
+  display: flex; align-items: center; gap: 6px;
+  color: var(--gray-500); font-size: 13px; padding: 8px 0;
+}
+.collapse-toggle:hover { color: var(--gray-700); }
+.collapse-toggle .arrow { transition: transform 0.2s; font-size: 10px; }
+.collapse-toggle.open .arrow { transform: rotate(90deg); }
+.collapse-body { padding: 8px 0 0 0; }
+
+/* CAPEX ITEM ROW IN MANAGER */
+.capex-item-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 0;
+  border-bottom: 1px solid var(--gray-100);
+}
+.capex-item-row:last-child { border-bottom: none; }
+.capex-item-row .info { flex: 1; font-size: 13px; }
+.capex-item-row .info .code { color: var(--gray-400); font-size: 11px; }
+.capex-item-row .actions { display: flex; gap: 4px; }
+
+/* CHART CONTAINERS */
+.chart-container { position: relative; height: 200px; width: 100%; margin-bottom: 4px; }
+.chart-container-sm { height: 180px; }
+.chart-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+@media (max-width: 480px) {
+  .chart-grid { grid-template-columns: 1fr; }
+}
+
+/* RESPONSIVE */
+@media (min-width: 640px) {
+  body { padding-bottom: 0; }
+  .tab-bar { position: static; border-top: none; background: transparent; max-width: 600px; margin: 0 auto 16px; gap: 4px; }
+  .tab-btn { padding: 10px; flex-direction: row; gap: 6px; font-size: 12px; border-radius: 8px; }
+  .tab-btn svg { margin-bottom: 0; }
+  .tab-btn.active { background: var(--primary-light); }
+}
+
+/* CONFIRM DIALOG INLINE */
+.inline-confirm { margin-top: 8px; padding: 10px; background: var(--danger-light); border-radius: 8px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.inline-confirm button { padding: 6px 14px; font-size: 12px; }
+
+/* CAPEX ADD FORM INLINE */
+.capex-add-row {
+  display: flex; gap: 6px; margin-bottom: 8px;
+}
+.capex-add-row input {
+  flex: 1; padding: 8px 10px; font-size: 13px;
+  border: 1.5px solid var(--gray-200); border-radius: 8px; font-family: var(--font);
+}
+.capex-add-row input:focus { outline: none; border-color: var(--primary); }
+
+/* LOADING OVERLAY */
+.loading-overlay {
+  position: fixed; inset: 0; background: rgba(255,255,255,0.8);
+  display: flex; align-items: center; justify-content: center; z-index: 400;
+  backdrop-filter: blur(2px);
+}
+.loading-spinner {
+  width: 36px; height: 36px; border: 3px solid var(--gray-200);
+  border-top-color: var(--primary); border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>🛠️ Maintenance Expenses</h1>
+  <div>
+    <span class="badge" id="conn-status">BDT</span>
+  </div>
+</header>
+
+<!-- DASHBOARD PAGE -->
+<div id="page-dashboard" class="page active">
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="label">This Month</div>
+      <div class="value" id="dash-month-spent">৳0</div>
+      <div class="sub" id="dash-month-target">Target: ৳0</div>
+    </div>
+    <div class="kpi-card">
+      <div class="label">Remaining</div>
+      <div class="value green" id="dash-remaining">৳0</div>
+      <div class="sub" id="dash-remaining-pct">0% remaining</div>
+    </div>
+  </div>
+
+  <div class="kpi-row-3">
+    <div class="kpi-sm">
+      <div class="label">Avg/Day</div>
+      <div class="value" id="dash-avg-day">৳0</div>
+    </div>
+    <div class="kpi-sm">
+      <div class="label">Biggest Day</div>
+      <div class="value" id="dash-biggest-day">৳0</div>
+    </div>
+    <div class="kpi-sm">
+      <div class="label">Categories Used</div>
+      <div class="value" id="dash-cat-count">0</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎯 Monthly Target Progress</div>
+    <div id="dash-target-total-label" style="font-size:13px;color:var(--gray-500);margin-bottom:4px;">No target set</div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="dash-progress-fill"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400);margin-top:4px;">
+      <span id="dash-progress-spent">৳0</span>
+      <span id="dash-progress-pct">0%</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📈 Monthly Trend (Last 6 Months)</div>
+    <div class="chart-container"><canvas id="monthlyTrendChart"></canvas></div>
+  </div>
+
+  <div class="chart-grid">
+    <div class="card">
+      <div class="card-title">🥧 This Month by Category</div>
+      <div class="chart-container chart-container-sm"><canvas id="categoryPieChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 This Month Daily Spend</div>
+      <div class="chart-container chart-container-sm"><canvas id="dailySpendChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📈 Year-to-Date Cumulative</div>
+    <div class="chart-container"><canvas id="ytdCumulativeChart"></canvas></div>
+  </div>
+</div>
+
+<!-- ADD EXPENSE PAGE -->
+<div id="page-add" class="page">
+  <div class="card">
+    <div class="card-title" id="add-form-title">✏️ Add Expense</div>
+    <form id="expense-form" autocomplete="off">
+      <input type="hidden" id="edit-id" value="">
+      <div class="form-group">
+        <label for="exp-date">Date</label>
+        <input type="date" id="exp-date" required>
+      </div>
+      <div class="form-group">
+        <label for="exp-category">Category</label>
+        <select id="exp-category" required>
+          <option value="">Select category</option>
+          <option value="rmmachinery">Repair & Maintenance machinery (70030880)</option>
+          <option value="mspare">Maintenance Spare (70030890)</option>
+          <option value="consumable">Consumable of Maintenance spare (70000240)</option>
+          <option value="rmbuilding">Repair & Maintenance-Building (70030400)</option>
+          <option value="rmelectrical">Repair & Maintenance-Electrical (70030410)</option>
+          <option value="rmothers">Repair & Maintenance-Others (70030420)</option>
+          <option value="direct">Direct Expenses</option>
+          <option value="capex">CAPEX</option>
+        </select>
+      </div>
+      <div class="form-group hidden" id="capex-select-group">
+        <label for="exp-capex-item">CAPEX Item</label>
+        <select id="exp-capex-item">
+          <option value="">Select CAPEX item</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="exp-amount">Amount (৳)</label>
+        <input type="number" id="exp-amount" min="0" step="0.01" placeholder="0.00" required>
+      </div>
+      <div class="form-group">
+        <label for="exp-remarks">Remarks</label>
+        <textarea id="exp-remarks" placeholder="Optional notes..." rows="2"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">💾 Save Expense</button>
+      <button type="button" id="add-cancel-edit" class="btn btn-outline btn-block hidden" style="margin-top:6px;">Cancel Edit</button>
+    </form>
+  </div>
+
+  <!-- CAPEX Manager -->
+  <div class="card">
+    <div class="collapse-toggle" id="capex-manager-toggle">
+      <span class="arrow">▶</span> Manage CAPEX Items
+    </div>
+    <div class="collapse-body hidden" id="capex-manager-body">
+      <div style="font-size:13px;color:var(--gray-500);margin-bottom:10px;">
+        CAPEX items are capital expenditure assets with a name and code (e.g., "Generator — 1042").
+      </div>
+      <div class="capex-add-row">
+        <input type="text" id="capex-new-name" placeholder="Asset name">
+        <input type="text" id="capex-new-code" placeholder="Code" style="max-width:90px;">
+        <button class="btn btn-sm btn-primary" id="capex-add-btn">+ Add</button>
+      </div>
+      <div id="capex-item-list">
+        <div style="font-size:13px;color:var(--gray-400);text-align:center;padding:12px;">No CAPEX items yet. Add one above.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ENTRIES PAGE -->
+<div id="page-entries" class="page">
+  <div class="card">
+    <div class="card-title">🔍 Search & Filter</div>
+    <div class="filters-row">
+      <select id="filter-month"><option value="">All Months</option></select>
+      <select id="filter-category">
+        <option value="">All Categories</option>
+        <option value="rmmachinery">R&M Machinery</option>
+        <option value="mspare">Maint. Spare</option>
+        <option value="consumable">Consumable</option>
+        <option value="rmbuilding">R&M Building</option>
+        <option value="rmelectrical">R&M Electrical</option>
+        <option value="rmothers">R&M Others</option>
+        <option value="direct">Direct Exp.</option>
+        <option value="capex">CAPEX</option>
+      </select>
+    </div>
+    <div class="filters-row">
+      <input type="text" id="filter-search" placeholder="Search remarks..." style="flex:2;">
+      <button id="entries-export-filtered" class="btn btn-sm btn-outline">📥 Export</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📋 Expense Log <span id="entries-count" style="color:var(--gray-400);font-weight:400;font-size:12px;"></span></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Category</th>
+            <th>Amount</th>
+            <th>Remarks</th>
+            <th style="width:70px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="entries-tbody"></tbody>
+      </table>
+    </div>
+    <div id="entries-empty" class="empty-state">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <p>No expenses recorded yet.</p>
+    </div>
+  </div>
+</div>
+
+<!-- TARGETS PAGE -->
+<div id="page-targets" class="page">
+  <div class="card">
+    <div class="card-title">🎯 Monthly Targets</div>
+    <div class="form-group">
+      <label for="target-month">Month</label>
+      <input type="month" id="target-month">
+    </div>
+    <div class="form-group">
+      <label for="target-total">Overall Monthly Target (৳)</label>
+      <input type="number" id="target-total" min="0" step="1000" placeholder="Enter overall budget">
+    </div>
+    <div style="font-size:13px;color:var(--gray-500);margin-bottom:10px;">Per-category targets (optional):</div>
+    <div id="target-per-cat"></div>
+    <div style="margin-top:4px;font-size:12px;color:var(--gray-400);text-align:right;" id="target-sum-display">Sum: ৳0</div>
+    <button id="target-save" class="btn btn-primary btn-block" style="margin-top:12px;">💾 Save Targets</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 Target vs Actual</div>
+    <div class="chart-container chart-container-sm"><canvas id="targetChart"></canvas></div>
+  </div>
+</div>
+
+<!-- EXPORT PAGE -->
+<div id="page-export" class="page">
+  <div class="card">
+    <div class="card-title">📤 Export to Excel</div>
+    <div style="font-size:13px;color:var(--gray-500);margin-bottom:12px;">Select a range and download formatted like the original template.</div>
+    <div class="export-presets" id="export-presets">
+      <button data-range="this-month">This Month</button>
+      <button data-range="last-month">Last Month</button>
+      <button data-range="quarter">Last Quarter</button>
+      <button data-range="year">Last 12 Months</button>
+      <button data-range="all">All Time</button>
+      <button data-range="custom" class="active">Custom</button>
+    </div>
+    <div class="export-range">
+      <input type="date" id="export-from">
+      <input type="date" id="export-to">
+    </div>
+    <div style="font-size:13px;color:var(--gray-500);margin-bottom:12px;text-align:center;">
+      <span id="export-entry-count">0</span> entries found in range
+    </div>
+    <button id="export-btn" class="btn btn-primary btn-block">📥 Download .xlsx</button>
+  </div>
+</div>
+
+<!-- BOTTOM NAV -->
+<nav class="tab-bar">
+  <button class="tab-btn active" data-tab="dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    Dashboard
+  </button>
+  <button class="tab-btn" data-tab="add">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    Add
+  </button>
+  <button class="tab-btn" data-tab="entries">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    Entries
+  </button>
+  <button class="tab-btn" data-tab="targets">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+    Targets
+  </button>
+  <button class="tab-btn" data-tab="export">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    Export
+  </button>
+</nav>
+
+<!-- MODAL -->
+<div id="modal" class="modal-overlay hidden">
+  <div class="modal-content">
+    <h3 id="modal-title">Confirm</h3>
+    <p id="modal-body" style="font-size:14px;color:var(--gray-500);margin-bottom:16px;"></p>
+    <div class="modal-actions">
+      <button id="modal-cancel" class="btn btn-outline">Cancel</button>
+      <button id="modal-confirm" class="btn btn-danger">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast"></div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" class="loading-overlay hidden">
+  <div class="loading-spinner"></div>
+</div>
+
+<script>
+// ============================================================
+// DATA LAYER
+// ============================================================
+// ============================================================
+// DATA LAYER — SUPABASE
+// ============================================================
+const CATEGORIES = [
+  { id: 'rmmachinery', label: 'R&M Machinery', full: 'Repair & Maintenance machinery (70030880)' },
+  { id: 'mspare', label: 'Maint. Spare', full: 'Maintenance Spare (70030890)' },
+  { id: 'consumable', label: 'Consumable', full: 'Consumable of Maintenance spare (70000240)' },
+  { id: 'rmbuilding', label: 'R&M Building', full: 'Repair & Maintenance-Building (70030400)' },
+  { id: 'rmelectrical', label: 'R&M Electrical', full: 'Repair & Maintenance-Electrical (70030410)' },
+  { id: 'rmothers', label: 'R&M Others', full: 'Repair & Maintenance-Others (70030420)' },
+  { id: 'direct', label: 'Direct Exp.', full: 'Direct Expenses' },
+  { id: 'capex', label: 'CAPEX', full: 'CAPEX' },
+];
+const CAT_IDS = CATEGORIES.map(c => c.id);
+const SUPABASE_URL = 'https://dwknqozghjeifxirmqyd.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3a25xb3pnaGplaWZ4aXJtcXlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNjkwMzAsImV4cCI6MjA5Njk0NTAzMH0.LZpNfuqb849dVEAPjgzV35bVmcY4ukxrcnU9q5zXmj0';
+
+let supabase = null;
+let supabaseReady = false;
+
+function initSupabase() {
+  try {
+    if (SUPABASE_URL.startsWith('https://') && !SUPABASE_URL.includes('YOUR-PROJECT')) {
+      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      supabaseReady = true;
+      updateConnStatus(true);
+    } else {
+      console.warn('[Supabase] Not configured. Run setup steps in README.md');
+      updateConnStatus(false);
+    }
+  } catch (e) {
+    console.error('[Supabase] Init failed:', e);
+    updateConnStatus(false);
+  }
+}
+
+function updateConnStatus(online) {
+  const el = document.getElementById('conn-status');
+  if (!el) return;
+  el.textContent = online ? 'BDT' : 'OFFLINE';
+  el.title = online ? 'Connected to Supabase' : 'Database not configured';
+}
+
+function setLoading(on) {
+  const el = document.getElementById('loading-overlay');
+  if (!el) return;
+  el.classList.toggle('hidden', !on);
+}
+
+async function dbError(op, err) {
+  console.error('[Supabase] ' + op + ' failed:', err);
+  showToast('⚠️ ' + (op === 'fetch' ? 'Failed to load data' : 'Save failed') + ' (' + (err.code || err.message) + ')');
+}
+
+// CRUD
+async function fetchExpenses() {
+  if (!supabaseReady) return [];
+  const { data, error } = await supabase.from('expenses').select('*').order('date', { ascending: false });
+  if (error) { dbError('fetch', error); return []; }
+  return data || [];
+}
+
+async function fetchCapexItems() {
+  if (!supabaseReady) return [];
+  const { data, error } = await supabase.from('capex_items').select('*').order('name');
+  if (error) { dbError('fetch', error); return []; }
+  return data || [];
+}
+
+async function addCapexItem(name, code) {
+  if (!supabaseReady) return null;
+  const { data, error } = await supabase.from('capex_items').insert({ name, code: code || '' }).select();
+  if (error) { dbError('save', error); return null; }
+  return data && data[0];
+}
+
+async function deleteCapexItemRow(id) {
+  if (!supabaseReady) return false;
+  const { error } = await supabase.from('capex_items').delete().eq('id', id);
+  if (error) { dbError('delete', error); return false; }
+  return true;
+}
+
+async function addExpense(entry) {
+  if (!supabaseReady) return null;
+  const { data, error } = await supabase.from('expenses').insert({
+    date: entry.date,
+    category: entry.category,
+    amount: entry.amount,
+    remarks: entry.remarks || '',
+    capex_item_id: entry.capexItem || null,
+  }).select();
+  if (error) { dbError('save', error); return null; }
+  return data && data[0];
+}
+
+async function updateExpenseRow(id, entry) {
+  if (!supabaseReady) return false;
+  const { error } = await supabase.from('expenses').update({
+    date: entry.date,
+    category: entry.category,
+    amount: entry.amount,
+    remarks: entry.remarks || '',
+    capex_item_id: entry.capexItem || null,
+  }).eq('id', id);
+  if (error) { dbError('save', error); return false; }
+  return true;
+}
+
+async function deleteExpenseRow(id) {
+  if (!supabaseReady) return false;
+  const { error } = await supabase.from('expenses').delete().eq('id', id);
+  if (error) { dbError('delete', error); return false; }
+  return true;
+}
+
+async function fetchTarget(monthKey) {
+  if (!supabaseReady) return null;
+  const { data, error } = await supabase.from('targets').select('*').eq('month_key', monthKey).maybeSingle();
+  if (error) { dbError('fetch', error); return null; }
+  return data || null;
+}
+
+async function upsertTarget(monthKey, total, perCategory) {
+  if (!supabaseReady) return false;
+  const { error } = await supabase.from('targets').upsert({
+    month_key: monthKey,
+    total: total || 0,
+    per_category: perCategory || {},
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'month_key' });
+  if (error) { dbError('save', error); return false; }
+  return true;
+}
+
+async function fetchAllTargets() {
+  if (!supabaseReady) return {};
+  const { data, error } = await supabase.from('targets').select('*');
+  if (error) { dbError('fetch', error); return {}; }
+  const obj = {};
+  (data || []).forEach(t => { obj[t.month_key] = { total: Number(t.total) || 0, perCategory: t.per_category || {} }; });
+  return obj;
+}
+
+// In-memory caches to avoid round trips when multiple render pieces need the same data
+const cache = {
+  expenses: null,
+  capexItems: null,
+  targets: null,        // object keyed by month_key
+};
+
+async function getExpenses(forceRefresh = false) {
+  if (!forceRefresh && cache.expenses) return cache.expenses;
+  cache.expenses = await fetchExpenses();
+  return cache.expenses;
+}
+
+async function getCapexItems(forceRefresh = false) {
+  if (!forceRefresh && cache.capexItems) return cache.capexItems;
+  cache.capexItems = await fetchCapexItems();
+  return cache.capexItems;
+}
+
+async function getAllTargets(forceRefresh = false) {
+  if (!forceRefresh && cache.targets) return cache.targets;
+  cache.targets = await fetchAllTargets();
+  return cache.targets;
+}
+
+function invalidateCache() {
+  cache.expenses = null;
+  cache.capexItems = null;
+  cache.targets = null;
+}
+
+// ============================================================
+// LEGACY HELPERS (operate on in-memory arrays passed in)
+// ============================================================
+function getMonthKey(d) {
+  const dt = new Date(d);
+  return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+}
+
+function formatCurrency(n) {
+  return '৳' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function currentMonthStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+function currentYear() {
+  return new Date().getFullYear();
+}
+
+function formatDateDisplay(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+}
+
+function entriesForMonth(expenses, monthKey) {
+  return expenses.filter(e => getMonthKey(e.date) === monthKey);
+}
+
+function totalForMonth(expenses, monthKey) {
+  return entriesForMonth(expenses, monthKey).reduce((s, e) => s + Number(e.amount), 0);
+}
+
+function totalByCategory(expenses, monthKey) {
+  const result = {};
+  CAT_IDS.forEach(c => result[c] = 0);
+  entriesForMonth(expenses, monthKey).forEach(e => {
+    if (result.hasOwnProperty(e.category)) result[e.category] += Number(e.amount);
+  });
+  return result;
+}
+
+function getTargetFromCache(monthKey) {
+  return cache.targets ? (cache.targets[monthKey] || null) : null;
+}
+
+function getDefaultPerCatTarget() {
+  const o = {};
+  CAT_IDS.forEach(c => o[c] = '');
+  return o;
+}
+
+function getCapexItemLocal(id) {
+  if (!cache.capexItems) return null;
+  return cache.capexItems.find(i => i.id === id) || null;
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+let toastTimer;
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ============================================================
+// MODAL
+// ============================================================
+let modalCallback = null;
+
+function showModal(title, body, cb) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').textContent = body;
+  document.getElementById('modal').classList.remove('hidden');
+  modalCallback = cb;
+}
+
+document.getElementById('modal-cancel').addEventListener('click', () => {
+  document.getElementById('modal').classList.add('hidden');
+  modalCallback = null;
+});
+document.getElementById('modal-confirm').addEventListener('click', () => {
+  document.getElementById('modal').classList.add('hidden');
+  if (modalCallback) modalCallback();
+  modalCallback = null;
+});
+
+// ============================================================
+// TAB NAVIGATION
+// ============================================================
+const tabBtns = document.querySelectorAll('.tab-btn');
+const pages = {
+  dashboard: document.getElementById('page-dashboard'),
+  add: document.getElementById('page-add'),
+  entries: document.getElementById('page-entries'),
+  targets: document.getElementById('page-targets'),
+  export: document.getElementById('page-export'),
+};
+
+tabBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    tabBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    Object.entries(pages).forEach(([k, el]) => el.classList.toggle('active', k === tab));
+    if (tab === 'dashboard') renderDashboard();
+    if (tab === 'entries') renderEntries();
+    if (tab === 'targets') initTargetsPage();
+    if (tab === 'export') updateExportCount();
+    if (tab === 'add') renderCapexDropdown();
+  });
+});
+// ============================================================
+// CAPEX ITEMS MANAGER
+// ============================================================
+// Toggle collapsible
+document.getElementById('capex-manager-toggle').addEventListener('click', () => {
+  const body = document.getElementById('capex-manager-body');
+  const toggle = document.getElementById('capex-manager-toggle');
+  body.classList.toggle('hidden');
+  toggle.classList.toggle('open');
+});
+
+document.getElementById('capex-add-btn').addEventListener('click', async () => {
+  const name = document.getElementById('capex-new-name').value.trim();
+  const code = document.getElementById('capex-new-code').value.trim();
+  if (!name) { showToast('⚠️ Enter an asset name'); return; }
+  if (!supabaseReady) { showToast('⚠️ Database not configured'); return; }
+
+  setLoading(true);
+  const row = await addCapexItem(name, code);
+  setLoading(false);
+  if (!row) return;
+
+  document.getElementById('capex-new-name').value = '';
+  document.getElementById('capex-new-code').value = '';
+  cache.capexItems = null;
+  await renderCapexItemList();
+  await renderCapexDropdown();
+  showToast('✅ CAPEX item added');
+});
+
+async function renderCapexItemList() {
+  const items = await getCapexItems();
+  const container = document.getElementById('capex-item-list');
+
+  if (items.length === 0) {
+    container.innerHTML = '<div style="font-size:13px;color:var(--gray-400);text-align:center;padding:12px;">No CAPEX items yet. Add one above.</div>';
+    return;
+  }
+
+  container.innerHTML = items.map(item => `
+    <div class="capex-item-row">
+      <div class="info">
+        <strong>${escapeHtml(item.name)}</strong>
+        ${item.code ? '<span class="code">— ' + escapeHtml(item.code) + '</span>' : ''}
+      </div>
+      <div class="actions">
+        <button class="btn btn-xs btn-outline" onclick="deleteCapexItem('${item.id}')">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function deleteCapexItem(id) {
+  showModal('Delete CAPEX Item', 'Remove this CAPEX item? Existing entries referencing it will be unaffected.', async () => {
+    setLoading(true);
+    const ok = await deleteCapexItemRow(id);
+    setLoading(false);
+    if (!ok) return;
+    cache.capexItems = null;
+    await renderCapexItemList();
+    await renderCapexDropdown();
+    showToast('🗑️ CAPEX item deleted');
+  });
+}
+
+async function renderCapexDropdown() {
+  const items = await getCapexItems();
+  const select = document.getElementById('exp-capex-item');
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">Select CAPEX item</option>'
+    + items.map(i =>
+      `<option value="${i.id}">${escapeHtml(i.name)}${i.code ? ' — ' + escapeHtml(i.code) : ''}</option>`
+    ).join('');
+  if (currentVal && items.some(i => i.id === currentVal)) {
+    select.value = currentVal;
+  }
+}
+
+// Category change → show/hide CAPEX item dropdown
+document.getElementById('exp-category').addEventListener('change', () => {
+  const isCapex = document.getElementById('exp-category').value === 'capex';
+  document.getElementById('capex-select-group').classList.toggle('hidden', !isCapex);
+  if (isCapex) renderCapexDropdown();
+});
+
+// ============================================================
+// EXPENSE FORM
+// ============================================================
+document.getElementById('exp-date').value = todayStr();
+const expenseForm = document.getElementById('expense-form');
+const editIdInput = document.getElementById('edit-id');
+const cancelEditBtn = document.getElementById('add-cancel-edit');
+
+expenseForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const editId = editIdInput.value;
+  const entry = {
+    date: document.getElementById('exp-date').value,
+    category: document.getElementById('exp-category').value,
+    amount: parseFloat(document.getElementById('exp-amount').value) || 0,
+    remarks: document.getElementById('exp-remarks').value.trim() || '',
+    capexItem: document.getElementById('exp-category').value === 'capex'
+      ? document.getElementById('exp-capex-item').value : '',
+  };
+
+  if (!entry.category) { showToast('⚠️ Select a category'); return; }
+  if (entry.amount <= 0) { showToast('⚠️ Enter a valid amount'); return; }
+  if (entry.category === 'capex' && !entry.capexItem) { showToast('⚠️ Select a CAPEX item'); return; }
+  if (!supabaseReady) { showToast('⚠️ Database not configured'); return; }
+
+  setLoading(true);
+  let result;
+  if (editId) {
+    const ok = await updateExpenseRow(editId, entry);
+    if (!ok) { setLoading(false); return; }
+    showToast('✅ Expense updated');
+    cancelEdit();
+  } else {
+    const row = await addExpense(entry);
+    if (!row) { setLoading(false); return; }
+    showToast('✅ Expense added');
+  }
+  setLoading(false);
+
+  cache.expenses = null;
+  expenseForm.reset();
+  document.getElementById('exp-date').value = todayStr();
+  document.getElementById('capex-select-group').classList.add('hidden');
+  renderEntries();
+});
+
+cancelEditBtn.addEventListener('click', cancelEdit);
+
+function cancelEdit() {
+  editIdInput.value = '';
+  cancelEditBtn.classList.add('hidden');
+  document.getElementById('add-form-title').textContent = '✏️ Add Expense';
+  expenseForm.reset();
+  document.getElementById('exp-date').value = todayStr();
+  document.getElementById('capex-select-group').classList.add('hidden');
+}
+
+async function populateEdit(id) {
+  const expenses = await getExpenses();
+  const entry = expenses.find(e => e.id === id);
+  if (!entry) return;
+
+  document.getElementById('edit-id').value = id;
+  document.getElementById('exp-date').value = entry.date;
+  document.getElementById('exp-category').value = entry.category;
+  document.getElementById('exp-amount').value = entry.amount;
+  document.getElementById('exp-remarks').value = entry.remarks;
+
+  if (entry.category === 'capex') {
+    document.getElementById('capex-select-group').classList.remove('hidden');
+    await renderCapexDropdown();
+    if (entry.capex_item_id) document.getElementById('exp-capex-item').value = entry.capex_item_id;
+  } else {
+    document.getElementById('capex-select-group').classList.add('hidden');
+  }
+
+  cancelEditBtn.classList.remove('hidden');
+  document.getElementById('add-form-title').textContent = '✏️ Edit Expense';
+
+  document.querySelector('[data-tab="add"]').click();
+}
+
+// ============================================================
+// ENTRIES PAGE
+// ============================================================
+async function renderEntries() {
+  const allExpenses = await getExpenses();
+  const expenses = allExpenses; // already sorted desc by date
+  const monthFilter = document.getElementById('filter-month').value;
+  const catFilter = document.getElementById('filter-category').value;
+  const searchFilter = document.getElementById('filter-search').value.toLowerCase().trim();
+
+  let filtered = expenses;
+  if (monthFilter) filtered = filtered.filter(e => getMonthKey(e.date) === monthFilter);
+  if (catFilter) filtered = filtered.filter(e => e.category === catFilter);
+  if (searchFilter) filtered = filtered.filter(e => (e.remarks || '').toLowerCase().includes(searchFilter));
+
+  const tbody = document.getElementById('entries-tbody');
+  const empty = document.getElementById('entries-empty');
+  const count = document.getElementById('entries-count');
+
+  count.textContent = `(${filtered.length})`;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const capexItems = await getCapexItems();
+  const capexMap = {};
+  capexItems.forEach(i => { capexMap[i.id] = i; });
+
+  tbody.innerHTML = filtered.map(e => {
+    const cat = CATEGORIES.find(c => c.id === e.category);
+    const catLabel = cat ? cat.label : e.category;
+    let remarksHtml = escapeHtml(e.remarks || '');
+
+    if (e.category === 'capex' && e.capex_item_id && capexMap[e.capex_item_id]) {
+      const item = capexMap[e.capex_item_id];
+      const itemLabel = escapeHtml(item.name) + (item.code ? ' — ' + escapeHtml(item.code) : '');
+      const badge = '<span class="capex-item-badge">' + itemLabel + '</span>';
+      if (remarksHtml) remarksHtml = badge + ' ' + remarksHtml;
+      else remarksHtml = badge;
+    }
+
+    return `<tr>
+      <td>${formatDateDisplay(e.date)}</td>
+      <td><span class="cat-badge cat-${e.category}">${catLabel}</span></td>
+      <td><strong>${formatCurrency(e.amount)}</strong></td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(e.remarks || '')}">${remarksHtml || '—'}</td>
+      <td class="actions-cell">
+        <button class="edit-btn" onclick="populateEdit('${e.id}')">✏️</button>
+        <button class="del-btn" onclick="deleteExpense('${e.id}')">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function deleteExpense(id) {
+  showModal('Delete Expense', 'Are you sure you want to delete this entry?', async () => {
+    setLoading(true);
+    const ok = await deleteExpenseRow(id);
+    setLoading(false);
+    if (!ok) return;
+    cache.expenses = null;
+    renderEntries();
+    showToast('🗑️ Expense deleted');
+  });
+}
+
+// Filter change events
+document.getElementById('filter-month').addEventListener('change', renderEntries);
+document.getElementById('filter-category').addEventListener('change', renderEntries);
+document.getElementById('filter-search').addEventListener('input', renderEntries);
+
+// Export filtered from entries page
+document.getElementById('entries-export-filtered').addEventListener('click', () => {
+  const monthFilter = document.getElementById('filter-month').value;
+  if (monthFilter) {
+    document.getElementById('export-from').value = monthFilter + '-01';
+    const d = new Date(monthFilter + '-01');
+    d.setMonth(d.getMonth() + 1);
+    d.setDate(0);
+    document.getElementById('export-to').value = d.toISOString().slice(0, 10);
+    document.querySelectorAll('#export-presets button').forEach(b => b.classList.remove('active'));
+    document.querySelector('[data-range="custom"]').classList.add('active');
+  }
+  updateExportCount();
+  document.querySelector('[data-tab="export"]').click();
+  showToast('📥 Date range set — download below');
+});
+
+// ============================================================
+// TARGETS PAGE
+// ============================================================
+async function initTargetsPage() {
+  const monthInput = document.getElementById('target-month');
+  if (!monthInput.value) monthInput.value = currentMonthStr();
+  await loadTargetsForMonth(monthInput.value);
+}
+
+async function loadTargetsForMonth(monthKey) {
+  const target = await fetchTarget(monthKey);
+  const total = target ? target.total : '';
+  const perCat = (target && target.per_category) ? target.per_category : getDefaultPerCatTarget();
+
+  document.getElementById('target-total').value = total;
+
+  const container = document.getElementById('target-per-cat');
+  container.innerHTML = CATEGORIES.map(c => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="flex:0 0 140px;font-size:12px;color:var(--gray-600);">${c.label}</span>
+      <input type="number" class="target-cat-input" data-cat="${c.id}"
+        min="0" step="1000" placeholder="৳0"
+        value="${perCat[c.id] || ''}"
+        style="flex:1;padding:7px 10px;font-size:13px;border:1.5px solid var(--gray-200);border-radius:8px;">
+    </div>
+  `).join('');
+
+  updateTargetSum();
+  await renderTargetChart(monthKey);
+
+  container.querySelectorAll('.target-cat-input').forEach(inp => {
+    inp.addEventListener('input', updateTargetSum);
+  });
+}
+
+document.getElementById('target-total').addEventListener('input', updateTargetSum);
+
+function updateTargetSum() {
+  let sum = 0;
+  document.querySelectorAll('.target-cat-input').forEach(inp => {
+    sum += parseFloat(inp.value) || 0;
+  });
+  document.getElementById('target-sum-display').textContent = 'Sum: ৳' + sum.toLocaleString('en-IN');
+}
+
+document.getElementById('target-save').addEventListener('click', async () => {
+  const monthKey = document.getElementById('target-month').value;
+  if (!monthKey) { showToast('⚠️ Select a month'); return; }
+  if (!supabaseReady) { showToast('⚠️ Database not configured'); return; }
+
+  const perCat = {};
+  document.querySelectorAll('.target-cat-input').forEach(inp => {
+    const v = parseFloat(inp.value);
+    if (v > 0) perCat[inp.dataset.cat] = v;
+  });
+  const total = parseFloat(document.getElementById('target-total').value) || 0;
+
+  setLoading(true);
+  const ok = await upsertTarget(monthKey, total, perCat);
+  setLoading(false);
+  if (!ok) return;
+
+  cache.targets = null;
+  await getAllTargets(true);
+  await renderTargetChart(monthKey);
+  showToast('✅ Targets saved');
+});
+
+document.getElementById('target-month').addEventListener('change', () => {
+  loadTargetsForMonth(document.getElementById('target-month').value);
+});
+
+// ============================================================
+// CHART RENDERING
+// ============================================================
+let monthlyTrendChart, categoryPieChart, dailySpendChart, ytdCumulativeChart, targetChart;
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  var div = document.createElement('div');
+  div.textContent = String(s);
+  return div.innerHTML;
+}
+
+async function renderDashboard() {
+  const expenses = await getExpenses();
+  const targetsObj = await getAllTargets();
+  cache.targets = targetsObj;
+  const monthKey = currentMonthStr();
+  const monthEntries = entriesForMonth(expenses, monthKey);
+  const spent = monthEntries.reduce((s, e) => s + Number(e.amount), 0);
+  const target = targetsObj[monthKey] || null;
+  const targetTotal = target ? Number(target.total) : 0;
+  const remaining = Math.max(0, targetTotal - spent);
+
+  // KPI
+  document.getElementById('dash-month-spent').textContent = formatCurrency(spent);
+  document.getElementById('dash-month-target').textContent = targetTotal ? 'Target: ' + formatCurrency(targetTotal) : 'No target set';
+  document.getElementById('dash-remaining').textContent = formatCurrency(remaining);
+  document.getElementById('dash-remaining-pct').textContent = targetTotal
+    ? Math.round((remaining / targetTotal) * 100) + '% remaining'
+    : (spent > 0 ? 'No target set' : 'No data yet');
+
+  const daysInMonth = new Date().getDate();
+  const avgDay = daysInMonth > 0 ? spent / daysInMonth : 0;
+  document.getElementById('dash-avg-day').textContent = formatCurrency(Math.round(avgDay));
+
+  const dailyTotals = {};
+  monthEntries.forEach(e => {
+    dailyTotals[e.date] = (dailyTotals[e.date] || 0) + Number(e.amount);
+  });
+  const maxDaily = Object.values(dailyTotals).length > 0 ? Math.max(...Object.values(dailyTotals)) : 0;
+  document.getElementById('dash-biggest-day').textContent = formatCurrency(maxDaily);
+
+  const catsUsed = new Set(monthEntries.map(e => e.category));
+  document.getElementById('dash-cat-count').textContent = catsUsed.size;
+
+  const fill = document.getElementById('dash-progress-fill');
+  const pctLabel = document.getElementById('dash-progress-pct');
+  const spentLabel = document.getElementById('dash-progress-spent');
+  const targetLabel = document.getElementById('dash-target-total-label');
+
+  if (targetTotal > 0) {
+    const pct = Math.min(100, (spent / targetTotal) * 100);
+    fill.style.width = pct + '%';
+    fill.className = 'progress-bar-fill' + (pct >= 100 ? ' danger' : pct >= 80 ? ' warning' : '');
+    pctLabel.textContent = Math.round(pct) + '%';
+    spentLabel.textContent = formatCurrency(spent);
+    targetLabel.textContent = 'Target: ' + formatCurrency(targetTotal);
+  } else {
+    fill.style.width = '0%';
+    fill.className = 'progress-bar-fill';
+    pctLabel.textContent = spent > 0 ? '—' : '0%';
+    spentLabel.textContent = formatCurrency(spent);
+    targetLabel.textContent = spent > 0 ? 'No target set' : 'Set a target on the Targets tab';
+  }
+
+  renderMonthlyTrend(expenses);
+  renderCategoryPie(expenses, monthKey);
+  renderDailySpend(expenses, monthKey);
+  renderYTDCumulative(expenses);
+}
+
+function renderMonthlyTrend(expenses) {
+  const months = [];
+  const d = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    const key = m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0');
+    const label = m.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+    months.push({ key, label });
+  }
+
+  const totals = months.map(m => totalForMonth(expenses, m.key));
+
+  const ctx = document.getElementById('monthlyTrendChart').getContext('2d');
+  if (monthlyTrendChart) monthlyTrendChart.destroy();
+
+  monthlyTrendChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: months.map(m => m.label),
+      datasets: [{
+        label: 'Spent (৳)',
+        data: totals,
+        backgroundColor: totals.map((t, i) => i === months.length - 1 ? '#1a56db' : '#93c5fd'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => '৳' + (v / 1000).toFixed(0) + 'k' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderCategoryPie(expenses, monthKey) {
+  const byCat = totalByCategory(expenses, monthKey);
+  const labels = [];
+  const values = [];
+  const colors = ['#3b82f6','#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#14b8a6','#a855f7'];
+
+  CATEGORIES.forEach((c, i) => {
+    const v = byCat[c.id] || 0;
+    if (v > 0) {
+      labels.push(c.label);
+      values.push(v);
+    }
+  });
+
+  const ctx = document.getElementById('categoryPieChart').getContext('2d');
+  if (categoryPieChart) categoryPieChart.destroy();
+
+  if (values.length === 0) {
+    categoryPieChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels: ['No data'], datasets: [{ data: [1], backgroundColor: ['#d1d5db'] }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '0%', plugins: { legend: { position: 'bottom' } } }
+    });
+    return;
+  }
+
+  categoryPieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors.slice(0, values.length),
+        borderWidth: 2,
+        borderColor: '#fff',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '40%',
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function renderDailySpend(expenses, monthKey) {
+  const ctx = document.getElementById('dailySpendChart').getContext('2d');
+  if (dailySpendChart) dailySpendChart.destroy();
+
+  const [y, m] = monthKey.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const labels = [];
+  const dailyVals = [];
+  const dailyData = {};
+
+  entriesForMonth(expenses, monthKey).forEach(e => {
+    dailyData[e.date] = (dailyData[e.date] || 0) + Number(e.amount);
+  });
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = monthKey + '-' + String(day).padStart(2, '0');
+    labels.push(String(day));
+    dailyVals.push(dailyData[dateStr] || 0);
+  }
+
+  if (dailyVals.every(v => v === 0)) {
+    dailySpendChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: ['No data'], datasets: [{ data: [0], backgroundColor: '#d1d5db' }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+    return;
+  }
+
+  dailySpendChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Spent',
+        data: dailyVals,
+        backgroundColor: dailyVals.map(v => v > 0 ? '#6366f1' : 'transparent'),
+        borderRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => '৳' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 15, font: { size: 9 } } }
+      }
+    }
+  });
+}
+
+function renderYTDCumulative(expenses) {
+  const ctx = document.getElementById('ytdCumulativeChart').getContext('2d');
+  if (ytdCumulativeChart) ytdCumulativeChart.destroy();
+
+  const year = currentYear();
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const labels = [];
+  const cumValues = [];
+  let runningTotal = 0;
+
+  for (let i = 0; i < 12; i++) {
+    const mk = year + '-' + String(i + 1).padStart(2, '0');
+    labels.push(months[i]);
+    runningTotal += totalForMonth(expenses, mk);
+    cumValues.push(runningTotal);
+  }
+
+  // Trim trailing zeros (months that haven't happened and have no data)
+  const now = new Date();
+  const currentMonthIdx = now.getMonth();
+
+  if (cumValues.slice(currentMonthIdx).every(v => v === 0)) {
+    // Show only up to current month
+    const keep = labels.slice(0, currentMonthIdx + 1);
+    const keepVals = cumValues.slice(0, currentMonthIdx + 1);
+
+    if (keepVals.every(v => v === 0)) {
+      ytdCumulativeChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: ['No data'], datasets: [{ data: [0], borderColor: '#d1d5db', fill: false }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+      });
+      return;
+    }
+
+    ytdCumulativeChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: keep,
+        datasets: [{
+          label: 'Cumulative (৳)',
+          data: keepVals,
+          borderColor: '#059669',
+          backgroundColor: 'rgba(5,150,105,0.1)',
+          fill: true,
+          tension: 0.3,
+          pointBackgroundColor: '#059669',
+          pointRadius: 3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: v => '৳' + (v / 1000).toFixed(0) + 'k' } }
+        }
+      }
+    });
+    return;
+  }
+
+  ytdCumulativeChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Cumulative (৳)',
+        data: cumValues,
+        borderColor: '#059669',
+        backgroundColor: 'rgba(5,150,105,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointBackgroundColor: '#059669',
+        pointRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => '৳' + (v / 1000).toFixed(0) + 'k' } }
+      }
+    }
+  });
+}
+
+async function renderTargetChart(monthKey) {
+  const expenses = await getExpenses();
+  const target = await fetchTarget(monthKey);
+  const byCat = totalByCategory(expenses, monthKey);
+
+  const labels = [];
+  const actuals = [];
+  const targets = [];
+  const colors = ['#3b82f6','#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#14b8a6','#a855f7'];
+
+  CATEGORIES.forEach((c) => {
+    const t = target && target.per_category ? (target.per_category[c.id] || 0) : 0;
+    const a = byCat[c.id] || 0;
+    if (t > 0 || a > 0) {
+      labels.push(c.label);
+      actuals.push(a);
+      targets.push(t);
+    }
+  });
+
+  const ctx = document.getElementById('targetChart').getContext('2d');
+  if (targetChart) targetChart.destroy();
+
+  if (labels.length === 0) {
+    targetChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: ['No data'], datasets: [{ label: 'Actual', data: [0], backgroundColor: '#d1d5db' }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+    return;
+  }
+
+  targetChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Target',
+          data: targets,
+          backgroundColor: 'rgba(107,114,128,0.3)',
+          borderRadius: 4,
+        },
+        {
+          label: 'Actual',
+          data: actuals,
+          backgroundColor: colors.slice(0, labels.length),
+          borderRadius: 4,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, font: { size: 11 } } }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => '৳' + (v / 1000).toFixed(0) + 'k' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+const EXPORT_COLUMNS = [
+  'Repair & Maintenance machinery (70030880)',
+  'Maintenance Spare (70030890)',
+  'Consumable of Maintenance spare (70000240)',
+  'Repair & Maintenance-Building (70030400)',
+  'Repair & Maintenance-Electrical (70030410)',
+  'Repair & Maintenance-Others (70030420)',
+  'Direct Expenses',
+  'CAPEX',
+  'Remarks',
+];
+
+async function getFilteredForExport() {
+  const from = document.getElementById('export-from').value;
+  const to = document.getElementById('export-to').value;
+  if (!from || !to) return { entries: [], capexMap: {} };
+  const expenses = await getExpenses();
+  const filtered = expenses.filter(e => e.date >= from && e.date <= to);
+  const capexItems = await getCapexItems();
+  const capexMap = {};
+  capexItems.forEach(i => { capexMap[i.id] = i; });
+  return { entries: filtered, capexMap };
+}
+
+async function updateExportCount() {
+  const { entries } = await getFilteredForExport();
+  document.getElementById('export-entry-count').textContent = entries.length;
+}
+
+document.querySelectorAll('#export-presets button').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    document.querySelectorAll('#export-presets button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const range = btn.dataset.range;
+    const d = new Date();
+
+    if (range === 'this-month') {
+      document.getElementById('export-from').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      document.getElementById('export-to').value = last.toISOString().slice(0, 10);
+    } else if (range === 'last-month') {
+      d.setMonth(d.getMonth() - 1);
+      document.getElementById('export-from').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      document.getElementById('export-to').value = last.toISOString().slice(0, 10);
+    } else if (range === 'quarter') {
+      d.setMonth(d.getMonth() - 3);
+      document.getElementById('export-from').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+      document.getElementById('export-to').value = todayStr();
+    } else if (range === 'year') {
+      d.setMonth(d.getMonth() - 11);
+      document.getElementById('export-from').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+      document.getElementById('export-to').value = todayStr();
+    } else if (range === 'all') {
+      const expenses = await getExpenses();
+      if (expenses.length > 0) {
+        const sorted = [...expenses].sort((a, b) => a.date.localeCompare(b.date));
+        document.getElementById('export-from').value = sorted[0].date;
+      } else {
+        document.getElementById('export-from').value = '2026-01-01';
+      }
+      document.getElementById('export-to').value = todayStr();
+    }
+    updateExportCount();
+  });
+});
+
+document.getElementById('export-from').addEventListener('change', updateExportCount);
+document.getElementById('export-to').addEventListener('change', updateExportCount);
+
+document.getElementById('export-btn').addEventListener('click', async () => {
+  const { entries, capexMap } = await getFilteredForExport();
+  if (entries.length === 0) {
+    showToast('⚠️ No entries in selected range');
+    return;
+  }
+
+  // Group entries by year-month
+  const byMonth = {};
+  entries.forEach(e => {
+    const mk = getMonthKey(e.date);
+    if (!byMonth[mk]) byMonth[mk] = [];
+    byMonth[mk].push(e);
+  });
+
+  function monthName(mk) {
+    const [y, m] = mk.split('-');
+    const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    return months[parseInt(m) - 1] + "'" + y.slice(2);
+  }
+
+  const wb = XLSX.utils.book_new();
+
+  Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b)).forEach(([mk, monthEntries]) => {
+    const dateSet = new Set();
+    const dateMap = {};
+
+    monthEntries.forEach(e => {
+      dateSet.add(e.date);
+      if (!dateMap[e.date]) {
+        dateMap[e.date] = { categories: {}, remarksList: [] };
+        CAT_IDS.forEach(c => dateMap[e.date].categories[c] = 0);
+      }
+      dateMap[e.date].categories[e.category] = (dateMap[e.date].categories[e.category] || 0) + Number(e.amount);
+
+      let remark = e.remarks || '';
+      if (e.category === 'capex' && e.capex_item_id && capexMap[e.capex_item_id]) {
+        const item = capexMap[e.capex_item_id];
+        const prefix = 'CAPEX: ' + item.name + (item.code ? ' [' + item.code + ']' : '');
+        remark = remark ? prefix + ' | ' + remark : prefix;
+      }
+      if (remark) dateMap[e.date].remarksList.push(remark);
+    });
+
+    const sortedDates = Array.from(dateSet).sort();
+    const sheetName = monthName(mk);
+
+    const wsData = [['Maintenance Cost (Month Wise)']];
+    wsData.push(['Date', ...EXPORT_COLUMNS]);
+
+    let colTotals = Array(9).fill(0);
+
+    sortedDates.forEach(date => {
+      const row = [date];
+      const dm = dateMap[date];
+      CAT_IDS.forEach((cid, idx) => {
+        const val = dm.categories[cid] || 0;
+        row.push(val);
+        colTotals[idx] += val;
+      });
+      row.push(dm.remarksList.join('; '));
+      wsData.push(row);
+    });
+
+    const totalRow = ['Total (BDT)', ...colTotals, ''];
+    wsData.push(totalRow);
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    ws['!cols'] = [
+      { wch: 12 },
+      { wch: 22 },
+      { wch: 16 },
+      { wch: 22 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 12 },
+      { wch: 30 },
+    ];
+
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }];
+
+    if (ws['A1']) ws['A1'].s = { font: { bold: true, sz: 14 } };
+    for (let c = 0; c < 10; c++) {
+      const addr = XLSX.utils.encode_cell({ r: 1, c });
+      if (ws[addr]) ws[addr].s = { font: { bold: true, sz: 11 }, fill: { fgColor: { rgb: "F3F4F6" } } };
+    }
+    for (let c = 0; c < 10; c++) {
+      const addr = XLSX.utils.encode_cell({ r: wsData.length - 1, c });
+      if (ws[addr]) ws[addr].s = { font: { bold: true, sz: 11 }, numFmt: '৳#,##0' };
+    }
+
+    for (let r = 2; r < wsData.length - 1; r++) {
+      for (let c = 1; c <= 8; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        if (ws[addr] && typeof ws[addr].v === 'number') {
+          ws[addr].s = ws[addr].s || {};
+          ws[addr].s.numFmt = '৳#,##0';
+        }
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  const from = document.getElementById('export-from').value;
+  const to = document.getElementById('export-to').value;
+  const filename = `Maintenance_Expenses_${from}_to_${to}.xlsx`;
+
+  XLSX.writeFile(wb, filename);
+  showToast('📥 Downloaded: ' + filename);
+});
+
+// ============================================================
+// LOCALSTORAGE MIGRATION (one-time)
+// ============================================================
+async function migrateFromLocalStorage() {
+  if (!supabaseReady) return;
+  const STORAGE_KEY = 'maint_expenses';
+  let raw;
+  try { raw = localStorage.getItem(STORAGE_KEY); } catch { return; }
+  if (!raw) return;
+
+  let data;
+  try { data = JSON.parse(raw); } catch { return; }
+
+  let migrated = false;
+
+  // CAPEX items
+  if (Array.isArray(data.capexItems) && data.capexItems.length) {
+    const { data: existing } = await supabase.from('capex_items').select('id').limit(1);
+    if (!existing || existing.length === 0) {
+      const rows = data.capexItems.map(i => ({ name: i.name, code: i.code || '' })).filter(i => i.name);
+      if (rows.length) {
+        const { error } = await supabase.from('capex_items').insert(rows);
+        if (!error) { cache.capexItems = null; migrated = true; }
+      }
+    }
+  }
+
+  // Need capex item id mapping (old key -> new uuid) for expense migration
+  const capexMap = {};
+  if (Array.isArray(data.capexItems) && data.capexItems.length) {
+    const items = await getCapexItems();
+    data.capexItems.forEach(oldItem => {
+      const found = items.find(i => i.name === oldItem.name && (i.code || '') === (oldItem.code || ''));
+      if (found) capexMap[oldItem.id] = found.id;
+    });
+  }
+
+  // Expenses
+  if (Array.isArray(data.expenses) && data.expenses.length) {
+    const { data: existing } = await supabase.from('expenses').select('id').limit(1);
+    if (!existing || existing.length === 0) {
+      const rows = data.expenses.map(e => ({
+        date: e.date,
+        category: e.category,
+        amount: Number(e.amount) || 0,
+        remarks: e.remarks || '',
+        capex_item_id: (e.category === 'capex' && e.capexItem && capexMap[e.capexItem]) || null,
+      })).filter(e => e.date && e.category);
+      if (rows.length) {
+        // Supabase limit is ~1000 per insert; chunk if needed
+        const chunkSize = 500;
+        for (let i = 0; i < rows.length; i += chunkSize) {
+          const { error } = await supabase.from('expenses').insert(rows.slice(i, i + chunkSize));
+          if (error) { console.error('Migration insert chunk failed:', error); break; }
+        }
+        cache.expenses = null;
+        migrated = true;
+      }
+    }
+  }
+
+  // Targets
+  if (data.targets && typeof data.targets === 'object' && Object.keys(data.targets).length) {
+    const { data: existing } = await supabase.from('targets').select('id').limit(1);
+    if (!existing || existing.length === 0) {
+      const rows = Object.entries(data.targets).map(([mk, t]) => ({
+        month_key: mk,
+        total: Number(t.total) || 0,
+        per_category: t.perCategory || {},
+      })).filter(r => r.month_key);
+      if (rows.length) {
+        const { error } = await supabase.from('targets').insert(rows);
+        if (!error) { cache.targets = null; migrated = true; }
+      }
+    }
+  }
+
+  if (migrated) {
+    showToast('✅ Data migrated to online database');
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  initSupabase();
+
+  // Populate month filter
+  const monthSelect = document.getElementById('filter-month');
+  const months = [];
+  const d = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    const key = m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0');
+    const label = m.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    months.push({ key, label });
+  }
+  monthSelect.innerHTML = '<option value="">All Months</option>' + months.map(m =>
+    `<option value="${m.key}">${m.label}</option>`
+  ).join('');
+
+  // Init export dates
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  document.getElementById('export-from').value = first.toISOString().slice(0, 10);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  document.getElementById('export-to').value = last.toISOString().slice(0, 10);
+
+  if (supabaseReady) {
+    setLoading(true);
+    await migrateFromLocalStorage();
+    setLoading(false);
+
+    // Render
+    await renderCapexItemList();
+    await renderCapexDropdown();
+    await renderDashboard();
+    await renderEntries();
+    await initTargetsPage();
+    await updateExportCount();
+  } else {
+    showToast('⚠️ Database not configured — see README.md');
+    // Render empty states
+    await renderCapexItemList();
+    await renderCapexDropdown();
+  }
+
+  // Handle modal escape / backdrop click
+  document.getElementById('modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('modal')) {
+      document.getElementById('modal').classList.add('hidden');
+      modalCallback = null;
+    }
+  });
+
+  // Online/offline indicator
+  window.addEventListener('online', () => updateConnStatus(true));
+  window.addEventListener('offline', () => updateConnStatus(false));
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

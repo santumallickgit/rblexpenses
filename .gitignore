@@ -1,0 +1,14 @@
+# Supabase
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Local xlsx exports
+Maintenance_Expenses_*.xlsx
