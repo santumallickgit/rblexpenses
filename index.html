@@ -632,13 +632,13 @@ const CAT_IDS = CATEGORIES.map(c => c.id);
 const SUPABASE_URL = 'https://dwknqozghjeifxirmqyd.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR3a25xb3pnaGplaWZ4aXJtcXlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNjkwMzAsImV4cCI6MjA5Njk0NTAzMH0.LZpNfuqb849dVEAPjgzV35bVmcY4ukxrcnU9q5zXmj0';
 
-let supabase = null;
+let db = null;
 let supabaseReady = false;
 
 function initSupabase() {
   try {
     if (SUPABASE_URL.startsWith('https://') && !SUPABASE_URL.includes('YOUR-PROJECT')) {
-      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       supabaseReady = true;
       updateConnStatus(true);
     } else {
@@ -680,35 +680,35 @@ async function dbError(op, err) {
 // CRUD
 async function fetchExpenses() {
   if (!supabaseReady) return [];
-  const { data, error } = await supabase.from('expenses').select('*').order('date', { ascending: false });
+  const { data, error } = await db.from('expenses').select('*').order('date', { ascending: false });
   if (error) { dbError('fetch', error); return []; }
   return data || [];
 }
 
 async function fetchCapexItems() {
   if (!supabaseReady) return [];
-  const { data, error } = await supabase.from('capex_items').select('*').order('name');
+  const { data, error } = await db.from('capex_items').select('*').order('name');
   if (error) { dbError('fetch', error); return []; }
   return data || [];
 }
 
 async function addCapexItem(name, code) {
   if (!supabaseReady) return null;
-  const { data, error } = await supabase.from('capex_items').insert({ name, code: code || '' }).select();
+  const { data, error } = await db.from('capex_items').insert({ name, code: code || '' }).select();
   if (error) { dbError('save', error); return null; }
   return data && data[0];
 }
 
 async function deleteCapexItemRow(id) {
   if (!supabaseReady) return false;
-  const { error } = await supabase.from('capex_items').delete().eq('id', id);
+  const { error } = await db.from('capex_items').delete().eq('id', id);
   if (error) { dbError('delete', error); return false; }
   return true;
 }
 
 async function addExpense(entry) {
   if (!supabaseReady) return null;
-  const { data, error } = await supabase.from('expenses').insert({
+  const { data, error } = await db.from('expenses').insert({
     date: entry.date,
     category: entry.category,
     amount: entry.amount,
@@ -721,7 +721,7 @@ async function addExpense(entry) {
 
 async function updateExpenseRow(id, entry) {
   if (!supabaseReady) return false;
-  const { error } = await supabase.from('expenses').update({
+  const { error } = await db.from('expenses').update({
     date: entry.date,
     category: entry.category,
     amount: entry.amount,
@@ -734,21 +734,21 @@ async function updateExpenseRow(id, entry) {
 
 async function deleteExpenseRow(id) {
   if (!supabaseReady) return false;
-  const { error } = await supabase.from('expenses').delete().eq('id', id);
+  const { error } = await db.from('expenses').delete().eq('id', id);
   if (error) { dbError('delete', error); return false; }
   return true;
 }
 
 async function fetchTarget(monthKey) {
   if (!supabaseReady) return null;
-  const { data, error } = await supabase.from('targets').select('*').eq('month_key', monthKey).maybeSingle();
+  const { data, error } = await db.from('targets').select('*').eq('month_key', monthKey).maybeSingle();
   if (error) { dbError('fetch', error); return null; }
   return data || null;
 }
 
 async function upsertTarget(monthKey, total, perCategory) {
   if (!supabaseReady) return false;
-  const { error } = await supabase.from('targets').upsert({
+  const { error } = await db.from('targets').upsert({
     month_key: monthKey,
     total: total || 0,
     per_category: perCategory || {},
@@ -760,7 +760,7 @@ async function upsertTarget(monthKey, total, perCategory) {
 
 async function fetchAllTargets() {
   if (!supabaseReady) return {};
-  const { data, error } = await supabase.from('targets').select('*');
+  const { data, error } = await db.from('targets').select('*');
   if (error) { dbError('fetch', error); return {}; }
   const obj = {};
   (data || []).forEach(t => { obj[t.month_key] = { total: Number(t.total) || 0, perCategory: t.per_category || {} }; });
@@ -1826,11 +1826,11 @@ async function migrateFromLocalStorage() {
 
   // CAPEX items
   if (Array.isArray(data.capexItems) && data.capexItems.length) {
-    const { data: existing } = await supabase.from('capex_items').select('id').limit(1);
+    const { data: existing } = await db.from('capex_items').select('id').limit(1);
     if (!existing || existing.length === 0) {
       const rows = data.capexItems.map(i => ({ name: i.name, code: i.code || '' })).filter(i => i.name);
       if (rows.length) {
-        const { error } = await supabase.from('capex_items').insert(rows);
+        const { error } = await db.from('capex_items').insert(rows);
         if (!error) { cache.capexItems = null; migrated = true; }
       }
     }
@@ -1848,7 +1848,7 @@ async function migrateFromLocalStorage() {
 
   // Expenses
   if (Array.isArray(data.expenses) && data.expenses.length) {
-    const { data: existing } = await supabase.from('expenses').select('id').limit(1);
+    const { data: existing } = await db.from('expenses').select('id').limit(1);
     if (!existing || existing.length === 0) {
       const rows = data.expenses.map(e => ({
         date: e.date,
@@ -1861,7 +1861,7 @@ async function migrateFromLocalStorage() {
         // Supabase limit is ~1000 per insert; chunk if needed
         const chunkSize = 500;
         for (let i = 0; i < rows.length; i += chunkSize) {
-          const { error } = await supabase.from('expenses').insert(rows.slice(i, i + chunkSize));
+          const { error } = await db.from('expenses').insert(rows.slice(i, i + chunkSize));
           if (error) { console.error('Migration insert chunk failed:', error); break; }
         }
         cache.expenses = null;
@@ -1872,7 +1872,7 @@ async function migrateFromLocalStorage() {
 
   // Targets
   if (data.targets && typeof data.targets === 'object' && Object.keys(data.targets).length) {
-    const { data: existing } = await supabase.from('targets').select('id').limit(1);
+    const { data: existing } = await db.from('targets').select('id').limit(1);
     if (!existing || existing.length === 0) {
       const rows = Object.entries(data.targets).map(([mk, t]) => ({
         month_key: mk,
@@ -1880,7 +1880,7 @@ async function migrateFromLocalStorage() {
         per_category: t.perCategory || {},
       })).filter(r => r.month_key);
       if (rows.length) {
-        const { error } = await supabase.from('targets').insert(rows);
+        const { error } = await db.from('targets').insert(rows);
         if (!error) { cache.targets = null; migrated = true; }
       }
     }
