@@ -664,6 +664,14 @@ function setLoading(on) {
   el.classList.toggle('hidden', !on);
 }
 
+// Safety net — if any code path fails to clear the loading overlay,
+// this guarantees the UI is unlocked within 8 seconds.
+let loadingFailsafe = null;
+function ensureLoadingCleared() {
+  if (loadingFailsafe) clearTimeout(loadingFailsafe);
+  loadingFailsafe = setTimeout(() => setLoading(false), 8000);
+}
+
 async function dbError(op, err) {
   console.error('[Supabase] ' + op + ' failed:', err);
   showToast('⚠️ ' + (op === 'fetch' ? 'Failed to load data' : 'Save failed') + ' (' + (err.code || err.message) + ')');
@@ -901,16 +909,22 @@ const pages = {
 };
 
 tabBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     const tab = btn.dataset.tab;
     tabBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     Object.entries(pages).forEach(([k, el]) => el.classList.toggle('active', k === tab));
-    if (tab === 'dashboard') renderDashboard();
-    if (tab === 'entries') renderEntries();
-    if (tab === 'targets') initTargetsPage();
-    if (tab === 'export') updateExportCount();
-    if (tab === 'add') renderCapexDropdown();
+    ensureLoadingCleared();
+    try {
+      if (tab === 'dashboard') await renderDashboard();
+      else if (tab === 'entries') await renderEntries();
+      else if (tab === 'targets') await initTargetsPage();
+      else if (tab === 'export') await updateExportCount();
+      else if (tab === 'add') await renderCapexDropdown();
+    } catch (e) {
+      console.error('Tab render failed for', tab, e);
+      showToast('⚠️ Failed to load tab — check console');
+    }
   });
 });
 // ============================================================
@@ -1806,6 +1820,7 @@ async function migrateFromLocalStorage() {
 
   let data;
   try { data = JSON.parse(raw); } catch { return; }
+  if (!data || typeof data !== 'object') return;
 
   let migrated = false;
 
@@ -1885,8 +1900,7 @@ async function init() {
 
   // Populate month filter
   const monthSelect = document.getElementById('filter-month');
-  const months = [];
-  const d = new Date();
+  const months = [];  const d = new Date();
   for (let i = 5; i >= 0; i--) {
     const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
     const key = m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0');
@@ -1904,22 +1918,28 @@ async function init() {
   document.getElementById('export-to').value = last.toISOString().slice(0, 10);
 
   if (supabaseReady) {
-    setLoading(true);
-    await migrateFromLocalStorage();
-    setLoading(false);
+    try {
+      setLoading(true);
+      ensureLoadingCleared();
+      await migrateFromLocalStorage();
+    } catch (e) {
+      console.error('Migration failed:', e);
+      showToast('⚠️ Migration failed — see console');
+    } finally {
+      setLoading(false);
+    }
 
-    // Render
-    await renderCapexItemList();
-    await renderCapexDropdown();
-    await renderDashboard();
-    await renderEntries();
-    await initTargetsPage();
-    await updateExportCount();
+    // Render — each in its own try so one failure doesn't break the rest
+    try { await renderCapexItemList(); } catch (e) { console.error('Capex list:', e); }
+    try { await renderCapexDropdown(); } catch (e) { console.error('Capex dropdown:', e); }
+    try { await renderDashboard(); } catch (e) { console.error('Dashboard:', e); }
+    try { await renderEntries(); } catch (e) { console.error('Entries:', e); }
+    try { await initTargetsPage(); } catch (e) { console.error('Targets:', e); }
+    try { await updateExportCount(); } catch (e) { console.error('Export count:', e); }
   } else {
     showToast('⚠️ Database not configured — see README.md');
-    // Render empty states
-    await renderCapexItemList();
-    await renderCapexDropdown();
+    try { await renderCapexItemList(); } catch (e) { console.error('Capex list:', e); }
+    try { await renderCapexDropdown(); } catch (e) { console.error('Capex dropdown:', e); }
   }
 
   // Handle modal escape / backdrop click
